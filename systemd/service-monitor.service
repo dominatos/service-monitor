@@ -1,0 +1,23 @@
+[Unit]
+Description=Service Monitor - check systemd service states and send Telegram alerts
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/service-monitor.sh
+EnvironmentFile=-/etc/service-monitor/service-monitor.conf
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+ReadWritePaths=/var/lib/service-monitor /run /etc/service-monitor
+
+[Install]
+WantedBy=multi-user.target

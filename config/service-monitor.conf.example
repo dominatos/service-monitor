@@ -1,0 +1,20 @@
+# Example configuration for service-monitor
+
+# Telegram bot token
+TG_BOT_TOKEN="123456789:ABCDEF1234567890abcdef1234567890"
+
+# Chat ID (user, group or channel)
+TG_CHAT_ID="655142522"
+
+# User whose user services we want to monitor (for 'user:service-name')
+MONITOR_USER="sviatoslav"
+
+# List of services to monitor (space-separated)
+# Mix system and user services:
+SERVICES="jellyfin.service transmission-daemon.service user:tg-torrent-bot-php.service"
+
+# Minimum interval (seconds) between repeated alerts for the same bad state
+COALESCE_SECONDS=300
+
+# Grace period after boot (seconds), alerts are suppressed during this time
+STARTUP_GRACE_SECONDS=60

@@ -210,7 +210,7 @@ Group=root
 
 # Security hardening
 NoNewPrivileges=yes
-ProtectSystem=strict
+#ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
 LockPersonality=yes

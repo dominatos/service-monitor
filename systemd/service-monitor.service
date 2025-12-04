@@ -1,13 +1,22 @@
 [Unit]
-Description=Service Monitor - check systemd service states and send Telegram alerts
+Description=Service Monitor
+Documentation=man:service-monitor.sh(1)
 After=network-online.target
 Wants=network-online.target
+# Only run this unit if the script exists
+ConditionPathExists=/usr/local/bin/service-monitor.sh
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
-Type=simple
+# We run a short script that exits immediately after performing its checks.
+Type=oneshot
+EnvironmentFile=/etc/service-monitor/service-monitor.conf
 ExecStart=/usr/local/bin/service-monitor.sh
-EnvironmentFile=-/etc/service-monitor/service-monitor.conf
-
+# Run as root to access systemd state and send notifications.
+User=root
+Group=root
+# Hardening options to reduce attack surface. See systemd.exec(5).
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
@@ -15,9 +24,7 @@ PrivateTmp=yes
 LockPersonality=yes
 CapabilityBoundingSet=
 RestrictSUIDSGID=yes
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-
-ReadWritePaths=/var/lib/service-monitor /run /etc/service-monitor
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 
 [Install]
 WantedBy=multi-user.target

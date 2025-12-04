@@ -1,20 +1,40 @@
-# Example configuration for service-monitor
+## Example configuration for service-monitor.sh
+# Copy this file to /etc/service-monitor/service-monitor.conf and edit the
+# variables to suit your environment. All variables are evaluated by the
+# script via `source`, so regular shell syntax applies. Lines starting
+# with '#' are comments.
 
-# Telegram bot token
-TG_BOT_TOKEN="123456789:ABCDEF1234567890abcdef1234567890"
+# Telegram bot token used to send messages. Create a bot via @BotFather and
+# obtain the token. Required.
+TG_BOT_TOKEN="123456789:ABCDEF_ReplaceWithRealToken"
 
-# Chat ID (user, group or channel)
-TG_CHAT_ID="655142522"
+# Telegram chat ID where notifications will be sent. This can be a user ID or
+# a group/channel ID. To send messages to a group or channel the bot must be
+# a member. Required.
+TG_CHAT_ID="-1001234567890"
 
-# User whose user services we want to monitor (for 'user:service-name')
-MONITOR_USER="sviatoslav"
+# List of services to monitor when the script runs via the systemd timer.
+# Specify system unit names (e.g. "sshd.service"), or prefix user units
+# with "user:" (e.g. "user:plasma-ksmserver.service"). Use spaces to
+# separate multiple services.
+SERVICES="nginx.service ssh.service"
 
-# List of services to monitor (space-separated)
-# Mix system and user services:
-SERVICES="jellyfin.service transmission-daemon.service user:tg-torrent-bot-php.service"
+# User name for monitoring user services. If you specify any services with
+# the "user:" prefix above, set MONITOR_USER to the corresponding user
+# name (not UID). Leave unset if you are only monitoring system services.
+#MONITOR_USER="username"
 
-# Minimum interval (seconds) between repeated alerts for the same bad state
+# Interval between repeated notifications for a service that remains in
+# a non-active state (seconds). If zero or negative, reminders are
+# disabled. The default in the script is 300 seconds (5 minutes).
 COALESCE_SECONDS=300
 
-# Grace period after boot (seconds), alerts are suppressed during this time
+# Grace period after boot during which alerts are suppressed (seconds).
+# This avoids false positives while the system is starting up. Default is
+# 60 seconds.
 STARTUP_GRACE_SECONDS=60
+
+# Override the hostname in messages. By default the script uses the
+# system's hostname (via `hostname`). Uncomment and set this to give
+# another name in notifications.
+#HOSTNAME_OVERRIDE="my-server"

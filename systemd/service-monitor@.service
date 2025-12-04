@@ -1,0 +1,24 @@
+[Unit]
+Description=Service Monitor (OnFailure handler) for %i
+After=network-online.target
+Wants=network-online.target
+
+ConditionPathExists=/usr/local/bin/service-monitor.sh
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/service-monitor/service-monitor.conf
+ExecStart=/usr/local/bin/service-monitor.sh %i
+User=root
+Group=root
+
+# Hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/service-monitor /run /etc/service-monitor

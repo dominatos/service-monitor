@@ -1,121 +1,212 @@
-# 📡 Service Monitor — systemd services monitoring with Telegram alerts
+# Service Monitor
 
-`service-monitor` is a lightweight, self-contained monitor for systemd services (system and user).  
-It tracks service state changes and sends alerts to a Telegram chat.
+`service-monitor` is a small, hardened Bash-based monitoring tool that watches selected **systemd** services and sends **Telegram notifications** when:
 
-Supported:
-- System services (`jellyfin.service`, `transmission-daemon.service`, …)
-- User services via prefix `user:`
-- Failure / recovery notifications
-- Periodic reminders while a service remains in a bad state
-- Grace period after boot
-- Single-instance lock
-- systemd sandboxing (ProtectSystem, ProtectHome, NoNewPrivileges, etc.)
+- a service crashes (`failed`),
+- a service recovers,
+- a service stays in a problematic state for a long time.
 
----
+It supports:
 
-## 🚀 Features
+- **Periodic monitoring** (via a systemd timer)
+- **Instant crash monitoring via `OnFailure=`** (triggered immediately when systemd detects a failure)
 
-- Monitor any systemd service:
-  - System: `jellyfin.service`, `transmission-daemon.service`, `vsftpd.service`, …
-  - User: `user:tg-torrent-bot-php.service`
-- Telegram alerts when:
-  - a service goes down
-  - a service recovers
-  - a service stays problematic for a long time (reminders)
-- Grace period after boot to ignore noise
-- Locking to avoid parallel runs
-- Logging to systemd-journal
-- Hardening via systemd sandbox
+Both modes can be used **simultaneously** for optimal results.
 
 ---
 
-## 📦 Layout
+## Features
 
-```
-/etc/service-monitor/
-    └── service-monitor.conf
-
-/usr/local/bin/service-monitor.sh
-
-/etc/systemd/system/
-    ├── service-monitor.service
-    └── service-monitor.timer
-
-/var/lib/service-monitor/state/
-```
+- **Real-time crash detection** using `OnFailure=service-monitor@%n.service`
+- **Periodic checks** using a systemd timer (configurable interval)
+- **RECOVERED notifications** when a service becomes healthy again
+- **STILL DOWN reminders** when a service remains unhealthy
+- Supports **system** and **user** services
+- Uses hardened systemd units
+- Stores state in `/var/lib/service-monitor/state`
+- Sends notifications via **Telegram Bot API**
 
 ---
 
-# 🔧 Installation
+## Requirements
 
-## 1. Create directories
+- `bash` 4+
+- `curl`
+- `systemd` 240+
+
+---
+
+# Installation
 
 ```bash
-sudo mkdir -p /etc/service-monitor
-sudo mkdir -p /var/lib/service-monitor/state
+sudo ./install.sh
 ```
+
+Installer actions:
+
+- Installs script → `/usr/local/bin/service-monitor.sh`
+- Installs config → `/etc/service-monitor/service-monitor.conf`
+- Creates state directory → `/var/lib/service-monitor/state/`
+- Installs systemd units:
+  - `service-monitor.service`
+  - `service-monitor.timer`
+  - `service-monitor@.service`
+- Enables + starts timer
+- Reloads systemd
 
 ---
 
-## 2. Install the script
+# Configuration
+
+Edit:
 
 ```bash
-sudo cp service-monitor.sh /usr/local/bin/service-monitor.sh
-sudo chown root:root /usr/local/bin/service-monitor.sh
-sudo chmod 755 /usr/local/bin/service-monitor.sh
+sudo vim /etc/service-monitor/service-monitor.conf
 ```
-
-⚠️ **Do not** use a symlink into `/home`.  
-With `ProtectHome=yes` systemd will block execution and you will get `203/EXEC`.
-
----
-
-## 3. Configuration `/etc/service-monitor/service-monitor.conf`
 
 Example:
 
 ```bash
-# Telegram bot token
-TG_BOT_TOKEN="123456789:ABCDEF1234567890abcdef1234567890"
+TG_BOT_TOKEN="123456789:abcdef"
+TG_CHAT_ID="-1001234567890"
 
-# Chat ID (user, group or channel)
-TG_CHAT_ID="655142522"
+SERVICES="ssh.service anydesk.service docker.service"
 
-# User whose *user services* we want to monitor
-MONITOR_USER="sviatoslav"
+# Monitor user services
+# MONITOR_USER="alice"
 
-# List of services to monitor (space-separated)
-# Mix system and user services:
-SERVICES="jellyfin.service transmission-daemon.service user:tg-torrent-bot-php.service"
-
-# Minimum interval (seconds) between repeated alerts
 COALESCE_SECONDS=300
-
-# Grace period after boot (seconds)
 STARTUP_GRACE_SECONDS=60
+
+# Optional hostname override
+# HOSTNAME_OVERRIDE="my-server"
 ```
 
 Validate syntax:
 
 ```bash
-bash -n /etc/service-monitor/service-monitor.conf
+sudo bash -n /etc/service-monitor/service-monitor.conf
 ```
 
 ---
 
-## 4. systemd unit `/etc/systemd/system/service-monitor.service`
+# How It Works
+
+### Timer-based mode
+
+A systemd timer runs `service-monitor.service` every N seconds.  
+The script checks all services listed in `SERVICES=`.
+
+### OnFailure mode (instant crash alerts)
+
+Add to a unit:
 
 ```ini
 [Unit]
-Description=Service Monitor - check systemd service states and send Telegram alerts
+OnFailure=service-monitor@%n.service
+```
+
+Systemd runs `service-monitor.sh <unit>` **immediately** when that service enters `failed`.
+
+---
+
+# Enabling Real-Time Crash Alerts
+
+```bash
+sudo systemctl edit jellyfin.service
+```
+
+Insert:
+
+```ini
+[Unit]
+OnFailure=service-monitor@%n.service
+```
+
+Reload:
+
+```bash
+sudo systemctl daemon-reload
+```
+
+Now DOWN notifications are instant.
+
+RECOVERED notifications will be sent on the next timer tick.
+
+---
+
+# Customizing Timer
+
+Modify:
+
+```
+systemd/service-monitor.timer
+```
+
+Or:
+
+```bash
+sudo systemctl edit service-monitor.timer
+```
+
+Parameters:
+
+- `OnBootSec=60s`
+- `OnUnitActiveSec=90s`
+
+Reload + restart:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart service-monitor.timer
+```
+
+---
+
+# Monitoring User Services
+
+```ini
+SERVICES="user:plasma-ksmserver.service"
+MONITOR_USER="sviatoslav"
+```
+
+User units are only monitored in timer mode  
+(systemd does not support `OnFailure` for user units).
+
+---
+
+# Logs & State Files
+
+Logs:
+
+```
+journalctl -u service-monitor.service
+journalctl -u service-monitor@anydesk.service
+```
+
+State:
+
+```
+/var/lib/service-monitor/state/<service>.status
+```
+
+---
+
+# Hardened systemd unit (service-monitor@.service)
+
+```ini
+[Unit]
+Description=Service Monitor (OnFailure handler) for %i
 After=network-online.target
 Wants=network-online.target
+ConditionPathExists=/usr/local/bin/service-monitor.sh
 
 [Service]
-Type=simple
-ExecStart=/usr/local/bin/service-monitor.sh
-EnvironmentFile=-/etc/service-monitor/service-monitor.conf
+Type=oneshot
+EnvironmentFile=/etc/service-monitor/service-monitor.conf
+ExecStart=/usr/local/bin/service-monitor.sh %i
+User=root
+Group=root
 
 # Security hardening
 NoNewPrivileges=yes
@@ -125,188 +216,124 @@ PrivateTmp=yes
 LockPersonality=yes
 CapabilityBoundingSet=
 RestrictSUIDSGID=yes
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-
-# Writable paths
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 ReadWritePaths=/var/lib/service-monitor /run /etc/service-monitor
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Reload systemd units:
-
-```bash
-sudo systemctl daemon-reload
 ```
 
 ---
 
-## 5. systemd timer `/etc/systemd/system/service-monitor.timer`
+# Testing
 
-```ini
-[Unit]
-Description=Run Service Monitor every 30 seconds
-
-[Timer]
-OnBootSec=1min
-OnUnitActiveSec=30s
-AccuracySec=5s
-Persistent=true
-Unit=service-monitor.service
-
-[Install]
-WantedBy=timers.target
-```
-
-Enable and start timer:
+## 1. Manual Test
 
 ```bash
-sudo systemctl enable --now service-monitor.timer
+sudo /usr/local/bin/service-monitor.sh anydesk.service
 ```
+
+Should send:
+- DOWN (if service is not running)
+- RECOVERED (if running)
 
 ---
 
-# 🧪 Verification
-
-### Run service manually
+## 2. Timer Test
 
 ```bash
-sudo systemctl start service-monitor.service
-sudo systemctl status service-monitor.service
-```
-
-### Check logs
-
-```bash
+systemctl list-timers | grep service-monitor
 journalctl -u service-monitor.service -e
 ```
 
-### Check timer
+---
+
+## 3. OnFailure Crash Test
+
+1. Validate drop-in:
 
 ```bash
-systemctl list-timers service-monitor.timer
+systemctl cat anydesk.service
 ```
 
-Expected output:
-
-```text
-NEXT                         LEFT      UNIT                   ACTIVATES
-Thu 2025-11-27 16:02:30 CET  21s       service-monitor.timer  service-monitor.service
-```
-
----
-
-# 🔍 Monitoring user services
-
-User services are referenced by prefix:
-
-```text
-user:<service-name>
-```
-
-Example:
-
-```text
-user:tg-torrent-bot-php.service
-```
-
-In config you **must** set:
+2. Restart service:
 
 ```bash
-MONITOR_USER="sviatoslav"
+sudo systemctl restart anydesk.service
 ```
 
-The script then queries user services via:
+3. Simulate crash:
 
 ```bash
-systemctl --user --machine=<user>@
+sudo systemctl kill --kill-who=main --signal=KILL anydesk.service
 ```
+
+4. Check:
+
+```bash
+journalctl -u service-monitor@anydesk.service -e
+```
+
+Telegram should show ❌ DOWN immediately.
 
 ---
 
-# 📤 Example Telegram alerts
+# ⚠️ Important: OnFailure Limitations (Why RECOVERED Requires Timer)
 
-### Service went down
+Systemd’s `OnFailure=` triggers **only when a unit enters `failed`**.  
+There is NO hook for:
 
-```text
-❌ Service DOWN
-Host: my-server
-Service: jellyfin.service
-Status: failed/dead/exit-code
-Time: 2025-11-27 15:22:10 CET
+- “OnSuccess”
+- “OnRecovered”
+- “OnActive”
+- “After restart”
 
-Diagnostics:
-systemctl status jellyfin.service
-journalctl -u jellyfin.service -e
-```
+Therefore:
 
-### Service recovered
+- DOWN notifications → event-driven (OnFailure)
+- RECOVERED notifications → timer-driven
+- STILL DOWN reminders → timer-driven
 
-```text
-✅ Service RECOVERED
-Host: my-server
-Service: jellyfin.service
-Status: active/running/success
-Time: 2025-11-27 15:24:05 CET
-```
+This is the correct hybrid design for systemd:
+- **OnFailure = fast crash detection**
+- **Timer = recovery detection + reminders**
 
-### Service still problematic (reminder)
+### Why not ExecStartPost?
 
-```text
-⚠️ Service STILL PROBLEMATIC
-Host: my-server
-Service: transmission-daemon.service
-Status: failed/dead/failed
-Time: 2025-11-27 15:32:10 CET
-```
+`ExecStartPost=` runs during the activation phase and breaks many services:
+
+- leaves units in `activating (start-post)`
+- fails on units with `PIDFile=`
+- causes instability in 3rd-party unit files (e.g. AnyDesk)
+
+This project intentionally **does not use `ExecStartPost` or `OnSuccess`**.
 
 ---
 
-# 🔐 systemd security hardening
+# Future Option: Full Event-Based Monitoring (v3)
 
-Service runs in a sandbox:
+Pure event-driven RECOVERED detection requires a **long-running daemon** that listens to systemd’s D-Bus:
 
-- `ProtectSystem=strict` — root filesystem read-only
-- `ProtectHome=yes` — `/home` is not accessible
-- `NoNewPrivileges=yes`
-- `PrivateTmp=yes`
-- `RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX`
-- `CapabilityBoundingSet=` — no Linux capabilities
+```
+org.freedesktop.systemd1
+ → PropertiesChanged
+```
 
-Writable only:
-
-- `/var/lib/service-monitor`
-- `/etc/service-monitor`
-- `/run`
+This is planned as a possible **service-monitor v3**, but current version
+remains lightweight and dependency-free.
 
 ---
 
-# 🧹 Uninstall
+# Uninstallation
 
 ```bash
 sudo systemctl disable --now service-monitor.timer
-sudo rm /etc/systemd/system/service-monitor.timer
-
-sudo systemctl disable --now service-monitor.service
-sudo rm /etc/systemd/system/service-monitor.service
-
-sudo rm -r /etc/service-monitor
-sudo rm -r /var/lib/service-monitor
-sudo rm /usr/local/bin/service-monitor.sh
-
+sudo rm -f /usr/local/bin/service-monitor.sh
+sudo rm -rf /etc/service-monitor
+sudo rm -f /etc/systemd/system/service-monitor.service
+sudo rm -f /etc/systemd/system/service-monitor@.service
 sudo systemctl daemon-reload
 ```
 
 ---
 
-# ❓ FAQ
+# License
 
-**How to change the check interval?**  
-Edit `OnUnitActiveSec=` in `service-monitor.timer` and restart the timer.
-
-**Can I customize diagnostics commands in alerts?**  
-Yes, edit the message formatting section in the script.
-
-**What happens if Telegram is unreachable?**  
-The script logs an error to systemd-journal; the system continues running.
+MIT License.

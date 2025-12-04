@@ -1,11 +1,12 @@
 [Unit]
-Description=Run Service Monitor every 30 seconds
+Description=Timer for service-monitor
+Requires=service-monitor.service
 
 [Timer]
+# Wait this long after boot before the first run
 OnBootSec=1min
-OnUnitActiveSec=30s
-AccuracySec=5s
-Persistent=true
+# Run again this long after the previous activation
+OnUnitActiveSec=90s
 Unit=service-monitor.service
 
 [Install]

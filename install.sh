@@ -1,45 +1,61 @@
 #!/usr/bin/env bash
+# install.sh — install the service-monitor script, configuration and systemd units
+#
+# This installer copies the monitoring script to /usr/local/bin, installs
+# a default configuration file if one does not already exist, and installs
+# the provided systemd service, timer and template units. It then reloads
+# systemd, enables the timer and starts it immediately. The installer must
+# be run with sufficient privileges (via sudo).
+
 set -euo pipefail
 
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "[*] Installing service-monitor..."
+# Paths
+INSTALL_BIN="/usr/local/bin/service-monitor.sh"
+CONFIG_DIR="/etc/service-monitor"
+CONFIG_FILE="${CONFIG_DIR}/service-monitor.conf"
+UNIT_DIR="/etc/systemd/system"
 
-# 1. Create directories
-echo "[*] Creating directories..."
-sudo mkdir -p /etc/service-monitor
-sudo mkdir -p /var/lib/service-monitor/state
+echo "Installing service-monitor…"
 
-# 2. Install script
-echo "[*] Installing service-monitor.sh to /usr/local/bin..."
-sudo cp "${REPO_DIR}/service-monitor.sh" /usr/local/bin/service-monitor.sh
-sudo chown root:root /usr/local/bin/service-monitor.sh
-sudo chmod 755 /usr/local/bin/service-monitor.sh
+# Create configuration directory and state directory
+sudo mkdir -p "$CONFIG_DIR" || true
+sudo mkdir -p /var/lib/service-monitor/state || true
 
-# 3. Install example config if none exists
-if [[ ! -f /etc/service-monitor/service-monitor.conf ]]; then
-  echo "[*] Installing example config to /etc/service-monitor/service-monitor.conf"
-  sudo cp "${REPO_DIR}/config/service-monitor.conf.example" /etc/service-monitor/service-monitor.conf
-  sudo chown root:root /etc/service-monitor/service-monitor.conf
-  sudo chmod 640 /etc/service-monitor/service-monitor.conf
+# Install the monitoring script
+echo "Copying script to ${INSTALL_BIN}"
+sudo install -m 755 "${SCRIPT_DIR}/service-monitor.sh" "$INSTALL_BIN"
+
+# Install the default configuration if missing
+if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo "Installing default configuration to ${CONFIG_FILE}"
+    sudo install -m 644 "${SCRIPT_DIR}/config/service-monitor.conf.example" "$CONFIG_FILE"
+    echo "Created ${CONFIG_FILE}. Please edit this file to configure Telegram credentials and services."
 else
-  echo "[*] /etc/service-monitor/service-monitor.conf already exists, skipping"
+    echo "Existing configuration found at ${CONFIG_FILE}. Not overwriting."
 fi
 
-# 4. Install systemd units
-echo "[*] Installing systemd units..."
-sudo cp "${REPO_DIR}/systemd/service-monitor.service" /etc/systemd/system/service-monitor.service
-sudo cp "${REPO_DIR}/systemd/service-monitor.timer" /etc/systemd/system/service-monitor.timer
+# Install systemd units
+echo "Installing systemd units to ${UNIT_DIR}"
+sudo install -m 644 "${SCRIPT_DIR}/systemd/service-monitor.service" "$UNIT_DIR/"
+sudo install -m 644 "${SCRIPT_DIR}/systemd/service-monitor.timer" "$UNIT_DIR/"
+sudo install -m 644 "${SCRIPT_DIR}/systemd/service-monitor@.service" "$UNIT_DIR/"
 
-# 5. Reload systemd
-echo "[*] Reloading systemd daemon..."
+# Reload systemd to pick up new units
+echo "Reloading systemd daemon"
 sudo systemctl daemon-reload
 
-# 6. Enable and start timer
-echo "[*] Enabling and starting service-monitor.timer..."
+# Enable and start the timer
+echo "Enabling and starting service-monitor.timer"
 sudo systemctl enable --now service-monitor.timer
 
+echo "Installation complete."
 echo
-echo "[✓] Installation complete."
-echo "   - Edit /etc/service-monitor/service-monitor.conf to set TG_BOT_TOKEN, TG_CHAT_ID and SERVICES."
-echo "   - To test immediately: sudo systemctl start service-monitor.service && sudo systemctl status service-monitor.service"
+echo "The timer runs service-monitor.sh at regular intervals. To receive immediate notifications"
+echo "when a service enters the 'failed' state, create a drop-in for each unit you wish to monitor"
+echo "with a line like:"
+echo "    [Unit]"
+echo "    OnFailure=service-monitor@%n.service"
+echo "This can be done by running 'sudo systemctl edit <unit>' and adding the lines above."
+echo "For more information see the README.md in this repository."

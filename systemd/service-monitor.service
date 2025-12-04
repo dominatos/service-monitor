@@ -18,7 +18,7 @@ User=root
 Group=root
 # Hardening options to reduce attack surface. See systemd.exec(5).
 NoNewPrivileges=yes
-ProtectSystem=strict
+#ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
 LockPersonality=yes

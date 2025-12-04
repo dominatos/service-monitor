@@ -14,7 +14,7 @@ Group=root
 
 # Hardening
 NoNewPrivileges=yes
-ProtectSystem=strict
+#ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
 LockPersonality=yes
